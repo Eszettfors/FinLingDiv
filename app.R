@@ -191,20 +191,13 @@ get_top_10_langs_ts = function(data = df_fin, mncp = "Helsinki") {
     mutate(percent = speakers / sum(speakers) * 100) %>%
     ungroup()
   
-<<<<<<< Updated upstream
-  
-=======
->>>>>>> Stashed changes
+
   # make complete
   data_filtered = data_filtered %>%
     select(year, language_name, speakers, percent) %>%
     complete(year, language_name,
              fill = list(speakers = 0, percent = 0))
   
-<<<<<<< Updated upstream
-  
-=======
->>>>>>> Stashed changes
   # Top 10 languages overall
   top_langs = data_filtered %>%
     group_by(language_name) %>%
@@ -232,10 +225,7 @@ get_top_10_langs_ts = function(data = df_fin, mncp = "Helsinki") {
     theme_minimal() +
     theme(legend.position = "right",
           legend.title = element_blank())
-<<<<<<< Updated upstream
 
-=======
->>>>>>> Stashed changes
   return(p)
 }
 
