@@ -9,4 +9,4 @@ Then run diversity/data_prep_diversity/ to generate the datasets. Diversity is c
 If you use the data, please cite the dataset at Zenodo as `Essfors, H. (2026). FinLingDiv (1.0) [Data set]. Zenodo. https://doi.org/10.5281/zenodo.18257720`
 
 ### Explore the data
-We also publish a shiny app that can be used to explore the data. The app is hosted online at https://f39e09-hannes-essfors.shinyapps.io/FinLingDiv/, or you can run it locally from app.R
+We also publish a shiny app that can be used to explore the data. The app is hosted online at https://f39e09-hannes-essfors.shinyapps.io/FinLingDiv/, or you can run it locally from app.R. The data can also be explored as a static website through [GitHub-pages](https://eszettfors.github.io/FinLingDivMap/)
