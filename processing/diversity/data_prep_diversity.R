@@ -403,10 +403,7 @@ get_diversity_q = function(langs, speakers, sim_m, q = 0){
   return(D)
 }
 
-df_div %>%
-  
 
-get_diversity_q(langs2, test_vec2, sim_m)
 ### calculate diversities --------
 
 
