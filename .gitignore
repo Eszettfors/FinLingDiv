@@ -2,3 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
+data/processed/asjp_wide.csv
+data/processed/glottolog.csv

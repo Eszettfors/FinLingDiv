@@ -89,7 +89,7 @@ df = df %>%
   left_join(iso_codes, join_by(language))
 
 # add language families and macroareas
-glotto = read_csv("data/raw/glottolog.csv")
+glotto = read_csv("data/processed/glottolog.csv")
 
 glotto_fam = glotto %>%
   filter(category == "Family") %>%
@@ -141,7 +141,7 @@ df_long %>%
   distinct(language) # go for akan
 df_long %>% # go for akan
   filter(ISO6393 == "hbs") %>%
-  distinct(language) # go for serbian
+  distinct(language) # go for serbian since bosnian and croatian exist separately
 
 df_long %>%
   filter(ISO6393 == "ron") %>%
@@ -221,16 +221,30 @@ df_long = df_long %>%
   mutate(Latitude = ifelse(ISO6393 == "ido", 49.33, Latitude),
          Longitude = ifelse(ISO6393 == "ido", 2.81, Longitude))
 
+# construct national time series
 nat_ts = df_long %>%
   group_by(language, ISO6393, year) %>%
+  summarize(speakers = sum(speakers))
+
+# construct regional time series
+mun_to_region = readr::read_delim("data/raw/municipality_to_region.csv", delim = ";")
+mun_to_region = mun_to_region %>%
+  select(sourceName, targetName) %>%
+  rename("municipality" = sourceName,
+         "region" = targetName)
+
+
+df_region = df_long %>%
+  left_join(mun_to_region) %>%
+  group_by(region, year, ISO6393, language) %>%
   summarize(speakers = sum(speakers))
 
 # write raw data
 write_csv(df_long, "data/processed/full_time_series_speakers.csv")
 write_csv(nat_ts, "data/processed/national_time_series_speakers.csv")
+write_csv(df_region, "data/processed/regional_time_series_speakers.csv")
 
 # generate similarity measures ----------------
-
 df_long %>%
   filter(!ISO6393 %in% df_asjp$ISO6393) %>%
   distinct(ISO6393)
@@ -249,15 +263,15 @@ langs = df_long %>%
 
 sim_m = get_ldn_sim_matrix(langs)
 
-
 # generate diversity
 # for each year, generate q = 0, q = 1 and q = 2 for each municipality both naive and non naive
 
 get_prop_vec = function(speakers){
-  #takes a vector with language frequencies and turns it into a proportion vector
+  #takes a vector with speakers and turns it into a proportion vector
   prop_vec = speakers / sum(speakers)
   return(prop_vec)
 }
+
 
 get_richness = function(speakers){
   # takes a vector with speakers per language and calculates the richness
@@ -265,6 +279,8 @@ get_richness = function(speakers){
   richness = length(speakers)
   return(richness)
 }
+
+
 
 get_exp_shannon = function(speakers){
   # takes a vector of proportions and calculates the exponent shannon entropy
@@ -276,10 +292,12 @@ get_exp_shannon = function(speakers){
   return(exp(entropy))
 }
 
-get_inv_simp = function(prop_vec){
+
+
+get_inv_simp = function(speakers){
   # takes a vector of proportions and calculates the inverse simpson
   
-  prop_vec = get_prop_vec(prop_vec)
+  prop_vec = get_prop_vec(speakers)
   prop_vec = prop_vec[prop_vec != 0]
   squared_prop = prop_vec*prop_vec
   inv_simp = 1/sum(squared_prop)
@@ -288,8 +306,44 @@ get_inv_simp = function(prop_vec){
 }
 
 
-get_shannon_diversity = function(speakers, sim_m){
+subset_and_reorder = function(matrix, labels){
+  # this function takes a matrix and labels and input and subsets the matrix to match the values in the label.
+  
+  matrix = matrix[labels, labels]
+  
+  return(matrix)
+}
+
+subset_langs = function(sim_m, langs, speakers){
+  
+  # subset to langs found in the similarity matrix
+  sim_langs = rownames(sim_m)
+  
+  # save the indices of the langs that exist in the similarity matrix
+  valid_idx = langs %in% sim_langs
+  
+  # Subset langs and speakers according to the indices
+  langs = langs[valid_idx]
+  speakers = speakers[valid_idx]
+  return(list(langs, speakers))
+  
+}
+
+
+get_shannon_diversity = function(langs, speakers, sim_m){
   # calculates diversity for q = 1 ergo shannon given a vector with proportions
+  
+  # subset the languages and their speakers to match that of the sim vector in case not all languages are covered 
+  langs_and_speakers = subset_langs(sim_m, langs, speakers)
+  langs = langs_and_speakers[[1]]
+  speakers = langs_and_speakers[[2]]
+  
+  
+  
+  # subset sim matrix to the languages
+  sim_m = subset_and_reorder(sim_m, langs)
+  
+  
   prop_vec = get_prop_vec(speakers)
   
   # for each proportion, get the expected similarity to all other proportions
@@ -304,17 +358,38 @@ get_shannon_diversity = function(speakers, sim_m){
   
   return(D)
 }
+langs2 = c("swe", "eng", "deu", "nor")
+test_vec2 = c(5, 5, 5, 5)
+
+I = matrix(data = 0, nrow = length(test_vec2),
+           ncol = length(test_vec2))
+
+diag(I) = 1
+colnames(I) = langs2
+rownames(I) = langs2
+get_shannon_diversity(langs2, test_vec2, sim_m)
+get_shannon_diversity(langs2, test_vec2, I)
 
 
-get_diversity_q = function(speakers, sim_m, q = 0){
+get_diversity_q = function(langs, speakers, sim_m, q = 0){
   # a general function to implement diversity for any q
-  
-  prop_vec = get_prop_vec(speakers)
   
   # to avoid division with zero, implement shannon diversity as a special case
   if (q == 1){
-    return(get_shannon_diversity(prop_vec, sim_m))
+    return(get_shannon_diversity(langs, speakers, sim_m))
   }
+  
+  # subset the languages and their speakers to match that of the sim vector in case not all languages are covered 
+  langs_and_speakers = subset_langs(sim_m, langs, speakers)
+  langs = langs_and_speakers[[1]]
+  speakers = langs_and_speakers[[2]]
+  
+  # subset sim matrix to the languages
+  sim_m = subset_and_reorder(sim_m, langs)
+  
+  # proportion vector
+  prop_vec = get_prop_vec(speakers)
+  
   
   # get expected similarity to all other prop for each proportion
   expected = sim_m %*% prop_vec
@@ -328,29 +403,23 @@ get_diversity_q = function(speakers, sim_m, q = 0){
   return(D)
 }
 
+df_div %>%
+  
 
-get_naive_diversity_q = function(prop_vec, q = 0){
-  # a general function to implement naive diversity for any q
-  
-  I = diag(length(prop_vec))
-  
-  # get diversity
-  D = get_diversity_q(prop_vec, I, q)
-  
-  return(D)
-}
-
+get_diversity_q(langs2, test_vec2, sim_m)
 ### calculate diversities --------
+
+
 
 # div index for each municipality
 df_div = df_long %>%
   group_by(municipality, year) %>%
-  summarize(richness = get_richness(speakers),
-            exp_shannon = get_exp_shannon(speakers),
-            inv_simpson = get_inv_simp(speakers),
-            lex_div_q_0 = get_diversity_q(speakers, sim_m[ISO6393, ISO6393], q = 0),
-            lex_div_q_1 = get_diversity_q(speakers, sim_m[ISO6393, ISO6393], q = 1),
-            lex_div_q_2 = get_diversity_q(speakers, sim_m[ISO6393, ISO6393], q = 2))
+  summarize(richness = get_richness(speakers = speakers),
+            exp_shannon = get_exp_shannon(speakers = speakers),
+            inv_simpson = get_inv_simp(speakers = speakers),
+            lex_div_q_0 = get_diversity_q(langs = ISO6393, speakers = speakers, sim_m = sim_m, q = 0),
+            lex_div_q_1 = get_diversity_q(langs = ISO6393, speakers = speakers, sim_m = sim_m, q = 1),
+            lex_div_q_2 = get_diversity_q(langs = ISO6393, speakers = speakers, sim_m = sim_m, q = 2))
 
 
 # div index for whole of finland
@@ -361,15 +430,28 @@ div_fin = df_long %>%
   summarize(richness = get_richness(speakers),
             exp_shannon = get_exp_shannon(speakers),
             inv_simpson = get_inv_simp(speakers),
-            lex_div_q_0 = get_diversity_q(speakers, sim_m[ISO6393, ISO6393], q = 0),
-            lex_div_q_1 = get_diversity_q(speakers, sim_m[ISO6393, ISO6393], q = 1),
-            lex_div_q_2 = get_diversity_q(speakers, sim_m[ISO6393, ISO6393], q = 2))
+            lex_div_q_0 = get_diversity_q(ISO6393, speakers, sim_m, q = 0),
+            lex_div_q_1 = get_diversity_q(ISO6393, speakers, sim_m, q = 1),
+            lex_div_q_2 = get_diversity_q(ISO6393, speakers, sim_m, q = 2))
+
+
+# div index for regions
+div_reg = df_region %>%
+  ungroup() %>%
+  group_by(region, year) %>%
+  summarize(richness = get_richness(speakers),
+            exp_shannon = get_exp_shannon(speakers),
+            inv_simpson = get_inv_simp(speakers),
+            lex_div_q_0 = get_diversity_q(ISO6393, speakers, sim_m, q = 0),
+            lex_div_q_1 = get_diversity_q(ISO6393, speakers, sim_m, q = 1),
+            lex_div_q_2 = get_diversity_q(ISO6393, speakers, sim_m, q = 2))
+
 
 
 # write data
 write_csv(df_div, "data/processed/diversity_time_series.csv")
 write_csv(div_fin, "data/processed/diversity_finland_time_series.csv")
-
+write_csv(div_reg, "data/processed/diversity_region_tiume_series.csv")
 
 #### fix geo data
 geodata = read_sf("data/geodata", options = "ENCODING=latin1") %>%
