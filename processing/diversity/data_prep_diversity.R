@@ -451,7 +451,7 @@ div_reg = df_region %>%
 # write data
 write_csv(df_div, "data/processed/diversity_time_series.csv")
 write_csv(div_fin, "data/processed/diversity_finland_time_series.csv")
-write_csv(div_reg, "data/processed/diversity_region_tiume_series.csv")
+write_csv(div_reg, "data/processed/diversity_region_time_series.csv")
 
 #### fix geo data
 geodata = read_sf("data/geodata", options = "ENCODING=latin1") %>%
